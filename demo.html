@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>月度工资计算器</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: Arial;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .box {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 0 10px #ccc;
+        }
+        h2 {
+            text-align: center;
+            margin-bottom: 20px;
+            color: #333;
+        }
+        .item {
+            margin-bottom: 15px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+        }
+        input {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+        }
+        textarea {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            min-height: 150px;
+            resize: vertical;
+        }
+        button {
+            padding: 10px 20px;
+            background: #2d8cf0;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 5px 0;
+        }
+        button:hover {
+            background: #1b76d3;
+        }
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .result {
+            margin-top: 20px;
+            padding: 15px;
+            background: #e8f4ff;
+            border-radius: 5px;
+            font-size: 16px;
+            line-height: 1.6;
+        }
+        .daily-list {
+            margin-top: 10px;
+            max-height: 300px;
+            overflow-y: auto;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 10px;
+        }
+        .daily-item {
+            padding: 8px;
+            border-bottom: 1px dashed #eee;
+            display: flex;
+            justify-content: space-between;
+        }
+        .daily-item:last-child {
+            border-bottom: none;
+        }
+        .summary {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #ddd;
+            font-weight: bold;
+        }
+        .recognize-box {
+            border: 1px solid #cce5ff;
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+<div class="box">
+    <h2>月度工资计算器</h2>
+
+    <!-- 新增文本识别区域 -->
+    <div class="recognize-box">
+        <div class="item">
+            <label>批量识别文本（粘贴待解析内容）</label>
+            <textarea id="recognizeText" placeholder="请粘贴包含时间、销售金额、退货金额的文本内容..."></textarea>
+        </div>
+        <div class="item">
+            <label>识别后填充的日期（如：5月1日）</label>
+            <input type="text" id="recognizeDate" placeholder="请输入对应日期，例：5月1日">
+        </div>
+        <button onclick="recognizeAndAddRecord()" style="background: #52c41a;">识别文本并添加记录</button>
+    </div>
+
+    <div class="item">
+        <label>日期（如：5月1日）</label>
+        <input type="text" id="date" placeholder="请输入当日日期，例：5月1日">
+    </div>
+
+    <div class="item">
+        <label>当日总销售金额（元）</label>
+        <input type="number" id="total" placeholder="请输入总金额" step="0.01">
+    </div>
+
+    <div class="item">
+        <label>当日退货金额（元）</label>
+        <input type="number" id="back" placeholder="请输入退货金额" step="0.01">
+    </div>
+
+    <div class="item">
+        <label>当日工作小时数（小时）</label>
+        <input type="number" id="hours" placeholder="请输入工作小时数" step="0.01">
+    </div>
+
+    <div class="btn-group">
+        <button onclick="addDailyRecord()">添加当日记录</button>
+        <button onclick="calcMonthlyTotal()">计算月度汇总</button>
+        <button onclick="clearAllRecords()" style="background: #ff4d4f;">清空所有记录</button>
+    </div>
+
+    <div class="result">
+        <div class="daily-list" id="dailyList">
+            <!-- 每日记录会动态显示在这里 -->
+            暂无每日记录，请先添加记录...
+        </div>
+        <div class="summary" id="monthlySummary">
+            <!-- 月度汇总会动态显示在这里 -->
+        </div>
+    </div>
+</div>
+
+<script>
+    // 存储每日工资记录的数组
+    let dailyRecords = [];
+    // 固定时薪
+    const hourlyWage = 80;
+
+    // 计算时间段差值（如19:00-24:00返回5）
+    function calculateHourDiff(timeStr) {
+        // 匹配时间格式 数字:数字-数字:数字
+        const timeReg = /(\d+):(\d+)-(\d+):(\d+)/;
+        const match = timeStr.match(timeReg);
+        if (!match) return 0;
+        
+        // 解析开始和结束时间
+        const startHour = parseInt(match[1]);
+        const startMin = parseInt(match[2]);
+        const endHour = parseInt(match[3]);
+        const endMin = parseInt(match[4]);
+        
+        // 计算总分钟数差值
+        const startTotalMin = startHour * 60 + startMin;
+        const endTotalMin = endHour * 60 + endMin;
+        let diffMin = endTotalMin - startTotalMin;
+        
+        // 处理跨天情况（如23:00-01:00）
+        if (diffMin < 0) {
+            diffMin += 24 * 60;
+        }
+        
+        // 转换为小时（保留两位小数）
+        return parseFloat((diffMin / 60).toFixed(2));
+    }
+
+    // 识别文本并添加记录
+    function recognizeAndAddRecord() {
+        const text = document.getElementById('recognizeText').value.trim();
+        const date = document.getElementById('recognizeDate').value.trim() || '未填写日期';
+        
+        if (!text) {
+            alert('⚠️ 请先粘贴待识别的文本内容！');
+            return;
+        }
+
+        // 1. 匹配大屏GMV金额（大屏GMV 后面的数字）
+        const gmvReg = /大屏GMV\s+(\d+\.?\d*)/;
+        const gmvMatch = text.match(gmvReg);
+        const total = gmvMatch ? parseFloat(gmvMatch[1]) : 0;
+
+        // 2. 匹配退货金额（退货金额 后面的数字）
+        const backReg = /退货金额\s+(\d+\.?\d*)/;
+        const backMatch = text.match(backReg);
+        const back = backMatch ? parseFloat(backMatch[1]) : 0;
+
+        // 3. 匹配时间段并计算工作小时
+        const hours = calculateHourDiff(text);
+
+        // 验证识别结果
+        if (total === 0 && back === 0 && hours === 0) {
+            alert('⚠️ 未识别到有效数据，请检查文本格式！');
+            return;
+        }
+
+        // 自动填充到手动输入框（方便核对）
+        document.getElementById('date').value = date;
+        document.getElementById('total').value = total;
+        document.getElementById('back').value = back;
+        document.getElementById('hours').value = hours;
+
+        // 计算当日工资
+        const realSale = total - back;
+        const commission = realSale * 0.003 * 0.85; // 销售提成
+        const hourlyTotal = hours * hourlyWage;     // 时薪总额
+        const dailyWage = commission + hourlyTotal; // 当日总工资
+
+        // 生成当日记录对象
+        const record = {
+            date: date,
+            realSale: realSale,
+            commission: commission,
+            hourlyTotal: hourlyTotal,
+            dailyWage: dailyWage
+        };
+
+        // 添加到记录数组
+        dailyRecords.push(record);
+
+        // 更新每日记录显示
+        renderDailyRecords();
+
+        // 清空识别输入框
+        document.getElementById('recognizeText').value = '';
+        document.getElementById('recognizeDate').value = '';
+
+        // 提示识别添加成功
+        alert(`✅ 识别成功！
+日期：${date}
+销售金额：${total} 元
+退货金额：${back} 元
+工作小时：${hours} 小时
+当日工资：${dailyWage.toFixed(2)} 元`);
+    }
+
+    // 添加当日工资记录
+    function addDailyRecord() {
+        // 获取输入值，默认值为0
+        let date = document.getElementById('date').value.trim() || '未填写日期';
+        let total = parseFloat(document.getElementById('total').value) || 0;
+        let back = parseFloat(document.getElementById('back').value) || 0;
+        let hours = parseFloat(document.getElementById('hours').value) || 0;
+        
+        // 计算当日工资（原有逻辑+时薪）
+        let realSale = total - back;
+        let commission = realSale * 0.003 * 0.85; // 销售提成
+        let hourlyTotal = hours * hourlyWage;     // 时薪总额
+        let dailyWage = commission + hourlyTotal; // 当日总工资
+
+        // 生成当日记录对象
+        const record = {
+            date: date,
+            realSale: realSale,
+            commission: commission,
+            hourlyTotal: hourlyTotal,
+            dailyWage: dailyWage
+        };
+
+        // 添加到记录数组
+        dailyRecords.push(record);
+
+        // 更新每日记录显示
+        renderDailyRecords();
+
+        // 清空当日输入框（保留日期输入框方便连续添加）
+        document.getElementById('total').value = '';
+        document.getElementById('back').value = '';
+        document.getElementById('hours').value = '';
+
+        // 提示添加成功
+        alert(`✅ ${date} 记录添加成功！`);
+    }
+
+    // 渲染每日记录列表
+    function renderDailyRecords() {
+        const dailyListEl = document.getElementById('dailyList');
+        
+        // 如果没有记录
+        if (dailyRecords.length === 0) {
+            dailyListEl.innerHTML = '暂无每日记录，请先添加记录...';
+            return;
+        }
+
+        // 拼接每日记录HTML
+        let html = '';
+        dailyRecords.forEach((item, index) => {
+            html += `
+                <div class="daily-item">
+                    <div>
+                        <strong>${item.date}</strong> 
+                        实际销售：${item.realSale.toFixed(2)}元 | 
+                        提成：${item.commission.toFixed(2)}元 | 
+                        时薪：${item.hourlyTotal.toFixed(2)}元
+                    </div>
+                    <div>当日工资：<span style="color: #e64340; font-weight: bold;">${item.dailyWage.toFixed(2)}元</span></div>
+                    <button style="background:#ff4d4f;margin-left:10px;padding:4px 10px;font-size:14px;" onclick="deleteDailyRecord(${index})">删除</button>
+                </div>
+            `;
+        });
+
+        dailyListEl.innerHTML = html;
+    }
+
+    // 删除单条记录
+    function deleteDailyRecord(index) {
+        if (confirm('确定要删除该条记录吗？')) {
+            dailyRecords.splice(index, 1);
+            renderDailyRecords();
+            // 如果已显示月度汇总，重新计算
+            if (document.getElementById('monthlySummary').innerHTML.trim() !== '') {
+                calcMonthlyTotal();
+            }
+        }
+    }
+
+    // 计算月度汇总
+    function calcMonthlyTotal() {
+        // 如果没有记录
+        if (dailyRecords.length === 0) {
+            alert('⚠️ 暂无每日记录，请先添加记录！');
+            return;
+        }
+
+        // 计算月度总计
+        let monthlyRealSale = 0; // 月度实际销售总额
+        let monthlyCommission = 0; // 月度提成总额
+        let monthlyHourlyTotal = 0; // 月度时薪总额
+        let monthlyTotalWage = 0; // 月度总工资
+
+        dailyRecords.forEach(item => {
+            monthlyRealSale += item.realSale;
+            monthlyCommission += item.commission;
+            monthlyHourlyTotal += item.hourlyTotal;
+            monthlyTotalWage += item.dailyWage;
+        });
+
+        // 显示月度汇总
+        const summaryEl = document.getElementById('monthlySummary');
+        summaryEl.innerHTML = `
+            月度汇总：<br>
+            月度实际销售总额：${monthlyRealSale.toFixed(2)} 元 | 
+            月度提成总额：${monthlyCommission.toFixed(2)} 元 | 
+            月度时薪总额：${monthlyHourlyTotal.toFixed(2)} 元<br>
+            <span style="color: #e64340; font-size: 18px;">月度总工资：${monthlyTotalWage.toFixed(2)} 元</span>
+        `;
+    }
+
+    // 清空所有记录
+    function clearAllRecords() {
+        if (confirm('❓ 确定要清空所有每日记录吗？此操作不可恢复！')) {
+            dailyRecords = [];
+            renderDailyRecords();
+            document.getElementById('monthlySummary').innerHTML = '';
+            document.getElementById('date').value = '';
+            document.getElementById('recognizeDate').value = '';
+            document.getElementById('recognizeText').value = '';
+            alert('✅ 所有记录已清空！');
+        }
+    }
+</script>
+</body>
+</html>
